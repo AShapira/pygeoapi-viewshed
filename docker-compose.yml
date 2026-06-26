@@ -1,0 +1,104 @@
+name: pygeoapi-viewshed
+
+services:
+  geoserver:
+    image: docker.osgeo.org/geoserver:${GEOSERVER_VERSION:-3.0.0}
+    container_name: pygeoapi-viewshed-geoserver
+    ports:
+      - "${GEOSERVER_PORT:-8088}:8080"
+    environment:
+      SKIP_DEMO_DATA: "false"
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver-change-me}
+      PROXY_BASE_URL: ${GEOSERVER_PUBLIC_URL:-http://localhost:8088/geoserver}
+    volumes:
+      - geoserver-data:/opt/geoserver_data
+      - shared-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/geoserver/web/"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+    restart: unless-stopped
+
+  viewshed-api:
+    build:
+      context: ./viewshed-api
+      args:
+        GDAL_IMAGE: ghcr.io/osgeo/gdal:ubuntu-small-3.11.4
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+    image: ghcr.io/ashapira/pygeoapi-viewshed-api:${APP_VERSION:-0.1.0}
+    container_name: pygeoapi-viewshed-api
+    ports:
+      - "${PYGEOAPI_PORT:-5000}:5000"
+    environment:
+      PYGEOAPI_CONFIG: /app/pygeoapi-config.yml
+      PYGEOAPI_OPENAPI: /tmp/pygeoapi-openapi.yml
+      PYGEOAPI_SERVER_URL: ${PUBLIC_BASE_URL:-http://localhost:8090}
+      GEOSERVER_URL: http://geoserver:8080/geoserver
+      GEOSERVER_PUBLIC_URL: ${GEOSERVER_PUBLIC_URL:-http://localhost:8090/geoserver}
+      GEOSERVER_USER: admin
+      GEOSERVER_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver-change-me}
+      RESULT_WORKSPACE: analysis
+      RESULT_DATA_DIR: /data/results
+      WORK_DIR: /data/work
+      ALLOWED_DEM_LAYERS: dem:srtm_center_israel,dem:synthetic_dem
+      MAX_DISTANCE_METERS: "5000"
+    volumes:
+      - shared-data:/data
+    depends_on:
+      geoserver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  viewer:
+    build:
+      context: ./viewer
+      args:
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+    image: ghcr.io/ashapira/pygeoapi-viewshed-viewer:${APP_VERSION:-0.1.0}
+    container_name: pygeoapi-viewshed-viewer
+    ports:
+      - "${VIEWER_PORT:-8090}:8080"
+    depends_on:
+      viewshed-api:
+        condition: service_started
+      geoserver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  bootstrap-dem:
+    image: ghcr.io/ashapira/pygeoapi-viewshed-api:${APP_VERSION:-0.1.0}
+    profiles: ["tools"]
+    environment:
+      GEOSERVER_URL: http://geoserver:8080/geoserver
+      GEOSERVER_USER: admin
+      GEOSERVER_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver-change-me}
+      DEM_PATH: /data/dem/synthetic_dem.tif
+    volumes:
+      - shared-data:/data
+    depends_on:
+      geoserver:
+        condition: service_healthy
+    entrypoint: ["python", "/app/tools/bootstrap_dem.py"]
+
+  bootstrap-srtm:
+    image: ghcr.io/ashapira/pygeoapi-viewshed-api:${APP_VERSION:-0.1.0}
+    profiles: ["tools"]
+    environment:
+      GEOSERVER_URL: http://geoserver:8080/geoserver
+      GEOSERVER_USER: admin
+      GEOSERVER_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver-change-me}
+      SRTM_PATH: /data/dem/srtm_center_israel_utm36.tif
+      SRTM_AOI_BBOX: "34.55,31.45,35.65,32.55"
+      SRTM_TILES: N31E034,N31E035,N32E034,N32E035
+      SRTM_LAYER_NAME: srtm_center_israel
+    volumes:
+      - shared-data:/data
+    depends_on:
+      geoserver:
+        condition: service_healthy
+    entrypoint: ["python", "/app/tools/bootstrap_srtm.py"]
+
+volumes:
+  geoserver-data:
+  shared-data:

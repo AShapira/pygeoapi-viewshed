@@ -1,0 +1,10 @@
+data/
+*.log
+viewer/node_modules/
+viewer/dist/
+.playwright/
+__pycache__/
+*.py[cod]
+.env
+security-reports/
+data-image/srtm_center_israel_utm36.tif

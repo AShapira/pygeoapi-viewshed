@@ -1,0 +1,47 @@
+server:
+  bind:
+    host: 0.0.0.0
+    port: 5000
+  url: ${PYGEOAPI_SERVER_URL}
+  mimetype: application/json; charset=UTF-8
+  encoding: utf-8
+  language: en-US
+  cors: true
+  pretty_print: true
+  limit: 10
+  map:
+    url: ""
+    attribution: ""
+
+logging:
+  level: INFO
+
+metadata:
+  identification:
+    title: pygeoapi Viewshed
+    description: OGC API - Processes endpoint that runs GDAL viewshed and publishes results to GeoServer.
+    keywords:
+      - pygeoapi
+      - OGC API - Processes
+      - GeoServer
+      - GDAL
+      - viewshed
+    keywords_type: theme
+    terms_of_service: Demonstration software. Validate data, security, and operations before production use.
+    url: ""
+  license:
+    name: NOASSERTION
+    url: ""
+  provider:
+    name: AShapira
+    url: ""
+  contact:
+    name: Project maintainers
+    email: ""
+    role: pointOfContact
+
+resources:
+  viewshed:
+    type: process
+    processor:
+      name: plugins.viewshed_process.ViewshedProcessor
