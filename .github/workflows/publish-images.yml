@@ -1,0 +1,64 @@
+name: Publish Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Image version tag to publish.
+        required: true
+        default: 0.1.0
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      APP_VERSION: ${{ inputs.version }}
+      IMAGE_PREFIX: ghcr.io/ashapira/pygeoapi-viewshed
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build API image
+        run: |
+          docker build \
+            --build-arg APP_VERSION="${APP_VERSION}" \
+            -t "${IMAGE_PREFIX}-api:${APP_VERSION}" \
+            -t "${IMAGE_PREFIX}-api:latest" \
+            ./viewshed-api
+
+      - name: Build viewer image
+        run: |
+          docker build \
+            --build-arg APP_VERSION="${APP_VERSION}" \
+            -t "${IMAGE_PREFIX}-viewer:${APP_VERSION}" \
+            -t "${IMAGE_PREFIX}-viewer:latest" \
+            ./viewer
+
+      - name: Prepare SRTM data image input
+        run: |
+          docker compose up -d geoserver viewshed-api
+          docker compose --profile tools run --rm bootstrap-srtm
+          docker cp pygeoapi-viewshed-api:/data/dem/srtm_center_israel_utm36.tif data-image/srtm_center_israel_utm36.tif
+          test -s data-image/srtm_center_israel_utm36.tif
+
+      - name: Build data image
+        run: |
+          docker build \
+            --build-arg APP_VERSION="${APP_VERSION}" \
+            -t "${IMAGE_PREFIX}-data:${APP_VERSION}" \
+            -t "${IMAGE_PREFIX}-data:latest" \
+            ./data-image
+
+      - name: Push images
+        run: |
+          for image in api viewer data; do
+            docker push "${IMAGE_PREFIX}-${image}:${APP_VERSION}"
+            docker push "${IMAGE_PREFIX}-${image}:latest"
+          done
